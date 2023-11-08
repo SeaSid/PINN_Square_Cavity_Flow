@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.cluster import DBSCAN
 
 from transformer import SquareHFM
 import matplotlib.pyplot as plt
@@ -50,6 +51,30 @@ def get_pred(ds):
     u_pred, v_pred, p_pred = pinn.net_uvp(x_data, y_data, z_data)
     return u_pred, v_pred, p_pred
 
+def point_data(path):
+    data = pd.read_csv(path, encoding='utf-8', skiprows=11).round({'x': 2, 'y': 2})
+    data = data.sort_values(by=['y', 'x'], ascending=[True, True]).reset_index(drop=True)
+
+    dbscan = DBSCAN(eps=0.05, min_samples=20)
+    dbscan.fit(data[['x', 'y', 'x-velocity', 'y-velocity']])
+    labels = dbscan.labels_
+    data['label'] = labels
+
+    category_counts = data['label'].value_counts()
+
+    total_samples = data.shape[0]
+    sample_ratios = (category_counts / total_samples).tolist()
+
+    sampled_dfs = []
+    for category, ratio in zip(category_counts.index, sample_ratios):
+        category_df = data[data['label'] == category]
+        sample_size = min(int(ratio * total_samples * 0.5), 100)
+        sampled_category_df = category_df.sample(n=sample_size, replace=True)
+        sampled_dfs.append(sampled_category_df)
+
+    data = pd.concat(sampled_dfs).reset_index(drop=True)
+    return data
+
 
 if __name__ == '__main__':
     st.set_page_config(
@@ -62,22 +87,29 @@ if __name__ == '__main__':
     choice = st.selectbox("请选择要加载的模型", ("pinn_transformer_10", "pinn_transformer_60"))
     pinn = get_model(choice)
 
-    choice_data = st.selectbox("请选择要加载的数据", ("0", "27", "43"))
-    data = pd.read_csv(f"data/{choice_data}.csv", encoding='utf-8')
+    choice_data = st.selectbox("请选择要加载的数据", ("cavity-0.101", "cavity-0.3", "cavity-0.699"))
+    path = f"data/{choice_data}.csv"
+    data = point_data(path)
+    button = st.button(":point_right:随机生成监督点，并生成方腔流", key="random")
+
     left_column, right_column = st.columns([3, 5])
+
     with left_column:
         st.subheader('监督点数据和散点图')
-        st.dataframe(data, use_container_width=True)
-        x, y = data['x'].values, data['y'].values
-        fig, ax = plt.subplots(figsize=(5, 5))
-        ax.scatter(x, y)
-        fig.tight_layout(pad=1.0)
-        st.pyplot(fig)
+        if button:
+            data = data.sample(frac=1).reset_index(drop=True)
+            num_samples = np.random.randint(4, 17)
+            data = data.sample(n=num_samples)
+
+            st.dataframe(data, use_container_width=True)
+            x, y = data['x'].values, data['y'].values
+            fig, ax = plt.subplots(figsize=(5, 5))
+            ax.scatter(x, y)
+            fig.tight_layout(pad=1.0)
+            st.pyplot(fig)
 
     with right_column:
         st.subheader('生成方腔流图')
-        button = st.button(":point_right:生成方腔流", key="predict")
-
         if button:
             u_pred, v_pred, p_pred = get_pred(data)
             u, v, p = u_pred.data.numpy().reshape(50, 50), v_pred.data.numpy().reshape(50, 50), p_pred.data.numpy().reshape(50, 50)
