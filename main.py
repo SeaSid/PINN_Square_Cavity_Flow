@@ -83,8 +83,8 @@ if __name__ == '__main__':
         layout='wide'
     )
 
-    st.title("PINN二维方腔流演示")
-    choice = st.selectbox("请选择要加载的模型", ("pinn_transformer_10", "pinn_transformer_60"))
+    st.title("二维方腔流演示")
+    choice = st.selectbox("请选择要加载的模型", ("model_10", "model_60"))
     pinn = get_model(choice)
 
     choice_data = st.selectbox("请选择要加载的数据", ("cavity-0.101", "cavity-0.3", "cavity-0.699"))
